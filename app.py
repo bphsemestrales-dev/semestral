@@ -32,7 +32,7 @@ from reportlab.platypus import (
 )
 
 st.set_page_config(
-    page_title="PBB Banfield - Hospital 5501",
+    page_title="Semestral Banfield",
     page_icon="🐾",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -2169,7 +2169,7 @@ st.markdown(
             <h2>Reporte y hallazgos del examen semestral</h2>
             <p>Plan de Bienestar Banfield ® · Hospital Veterinario UNAM-Banfield</p>
         </div>
-        <div class="banfield-badge">HOSPITAL 5501 · {especie.upper()}</div>
+        <div class="banfield-badge">ESPECIE · {especie.upper()}</div>
     </div>
     """,
     unsafe_allow_html=True,
