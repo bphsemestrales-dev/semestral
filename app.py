@@ -1715,7 +1715,7 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         ("Coccidia", f"{ptext(data['coc'])}"),
         ("Nemátodos", f"{ptext(data['nem'])}"),
         ("Giardia", f"{ptext(data['gia'])}"),
-        ("Gypilidium", f"{ptext(data['gyp'])}"),
+        ("Dypilidium", f"{ptext(data['gyp'])}"),
         ("Céstodos", f"{ptext(data['ces'])}"),
     ]
     add_section_pdf(
@@ -2030,7 +2030,7 @@ def build_via_text(d: dict) -> str:
         f"COCCIDIA: {d['coc']}",
         f"NEMATODOS: {d['nem']}",
         f"GIARDIA: {d['gia']}",
-        f"GYPILIDIUM: {d['gyp']}",
+        f"DYPILIDIUM: {d['gyp']}",
         f"CESTODOS: {d['ces']}",
         "--- SECCION 15 LABORATORIO (SANGRE Y UROANALISIS) ---",
         f"ERITROCITOS SANGRE: {d['eritrocitos']}",
@@ -2464,7 +2464,7 @@ with tabs[4]:
     data["coc"] = c2.selectbox("Coccidia", negpos, key="coc")
     data["nem"] = c3.selectbox("Nemátodos", negpos, key="nem")
     data["gia"] = c1.selectbox("Giardia", negpos, key="gia")
-    data["gyp"] = c2.selectbox("Gypilidium", negpos, key="gyp")
+    data["gyp"] = c2.selectbox("Dypilidium", negpos, key="gyp")
     data["ces"] = c3.selectbox("Céstodos", negpos, key="ces")
 
     ui_header("Sección 15 Análisis de sangre y Uroanálisis", "5.png")
