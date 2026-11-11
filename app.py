@@ -9,6 +9,9 @@ import urllib.parse
 from io import BytesIO
 from pathlib import Path as FilePath
 
+# --- NUEVA LIBRERÍA PARA OPTIMIZAR FOTOS (Evita sobrecarga de RAM) ---
+from PIL import Image as PILImage
+
 import pandas as pd
 import streamlit as st
 from reportlab.lib import colors
@@ -38,7 +41,7 @@ st.set_page_config(
 BASE_DIR = FilePath(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "assets"
 
-# --- PALETA OFICIAL BANFIELD PET HOSPITAL (BRANDBOOK ALIGNED) ---
+# --- PALETA OFICIAL BANFIELD PET HOSPITAL ---
 BANFIELD_BLUE = "#003366"        # Azul Institucional de tu carátula original
 BANFIELD_NAVY = "#002F6C"        # Pantone 294 C
 BANFIELD_ORANGE = "#DF4824"      # Naranja Institucional Banfield
@@ -71,41 +74,79 @@ PHOTO_SECTIONS = {
 }
 
 
-# --- PUENTE DE SINCRONIZACIÓN MÓVIL EN TIEMPO REAL (SIN FIREBASE EXTERNO) ---
+# --- PUENTE DE SINCRONIZACIÓN MÓVIL EN TIEMPO REAL (CON LIMPIEZA AUTOMÁTICA) ---
 @st.cache_resource
-def get_mobile_photo_store() -> dict[str, dict[str, list[dict]]]:
+def get_mobile_photo_store() -> dict[str, dict]:
     """
     Almacén en memoria compartida del servidor Streamlit.
-    Estructura: { token: { section_key: [ {"name": str, "bytes": bytes, "ts": str}, ... ] } }
-    Permite que el celular suba fotos escaneando el QR y la PC las reciba al instante.
+    Estructura: { token: {"timestamp": datetime, "data": { section_key: [ {"name": str, "bytes": bytes, "ts": str}, ... ] } } }
     """
     return {}
 
-
 mobile_store = get_mobile_photo_store()
 
+def cleanup_old_sessions():
+    """SOLUCIÓN A LA FUGA DE MEMORIA: Elimina sesiones (tokens) de más de 2 horas de antigüedad."""
+    now = datetime.datetime.now()
+    tokens_to_delete = []
+    for token, session_info in mobile_store.items():
+        if "timestamp" in session_info:
+            age = now - session_info["timestamp"]
+            if age.total_seconds() > 7200: # 7200 segundos = 2 horas
+                tokens_to_delete.append(token)
+    
+    for token in tokens_to_delete:
+        del mobile_store[token]
 
-# --- MOTOR DE LECTURA DE CATÁLOGOS CON CACHÉ DE ALTO RENDIMIENTO ---
+cleanup_old_sessions()
+
+def compress_image(uploaded_file, max_size=(800, 800), quality=70) -> bytes:
+    """SOLUCIÓN DE RAM PARA REPORTLAB: Comprime y redimensiona fotos pesadas de celulares."""
+    try:
+        img = PILImage.open(uploaded_file)
+        # Convertir a RGB por si acaso es RGBA (PNG)
+        img = img.convert("RGB")
+        img.thumbnail(max_size, PILImage.Resampling.LANCZOS)
+        
+        output = BytesIO()
+        img.save(output, format="JPEG", quality=quality)
+        return output.getvalue()
+    except Exception as e:
+        # Si algo falla (ej. formato raro), devolvemos los bytes originales
+        uploaded_file.seek(0)
+        return uploaded_file.read()
+
+
+# --- MOTOR DE LECTURA DE CATÁLOGOS CON AVISOS DE ERROR (SIN SILENCIAMIENTO) ---
 @st.cache_data(show_spinner=False)
 def load_catalogs(base_dir_str: str):
     base = FilePath(base_dir_str)
     df_cat = pd.DataFrame()
-    for f in [
+    
+    catalog_files = [
         "categorias_productos_2_3.csv",
         "categorias_productos_2_2.csv",
         "categorias_productos_2.csv",
         "categorias_productos.csv",
-    ]:
+    ]
+    catalog_loaded = False
+    for f in catalog_files:
         p = base / f
         if p.is_file():
             try:
                 df_cat = pd.read_csv(p)
+                catalog_loaded = True
                 break
-            except Exception:
-                pass
+            except Exception as e:
+                # Ya no silenciamos. Guardamos el error para mostrarlo en la barra lateral.
+                st.session_state["catalog_error"] = f"Error al leer {f}: {e}"
+                
+    if not catalog_loaded and not df_cat.empty:
+        st.session_state["catalog_error"] = "No se encontró ningún archivo de categorías de productos."
 
     ced_files = ["cedulas_profesionales_2.csv", "cedulas_profesionales.csv", "196147d8.csv"]
     medicos = ["MVZ - Ced. Pendiente", "Otro"]
+    ced_loaded = False
     for f in ced_files:
         path = base / f
         if path.is_file():
@@ -117,9 +158,13 @@ def load_catalogs(base_dir_str: str):
                         + " - Ced. "
                         + df_ced["Cedula Profesional"].astype(str).str.strip()
                     ).tolist() + ["Otro"]
+                    ced_loaded = True
                     break
-            except Exception:
-                pass
+            except Exception as e:
+                st.session_state["medicos_error"] = f"Error al leer {f}: {e}"
+                
+    if not ced_loaded:
+        st.session_state["medicos_error"] = "No se encontró un catálogo de cédulas válido."
 
     return df_cat, medicos
 
@@ -325,13 +370,13 @@ if qp.get("movil") == "1" and qp.get("token"):
     paciente_movil = str(qp.get("paciente", "Paciente")).strip()
 
     if token_movil not in mobile_store:
-        mobile_store[token_movil] = {}
+        mobile_store[token_movil] = {"timestamp": datetime.datetime.now(), "data": {}}
 
     st.markdown(
         f"""
         <div class="banfield-hero">
             <div>
-                <h2>📱 Cámara Clínica Banfield</h2>
+                <h2>📱 Cámara Semestrales Banfield</h2>
                 <p>Paciente: <b>{html.escape(paciente_movil)}</b> · Sesión: <code>{html.escape(token_movil)}</code></p>
             </div>
             <div class="banfield-badge">MODO MÓVIL</div>
@@ -377,10 +422,10 @@ if qp.get("movil") == "1" and qp.get("token"):
         use_container_width=True,
         disabled=not archivos_capturados,
     ):
-        sec_list = mobile_store[token_movil].setdefault(sec_key, [])
+        sec_list = mobile_store[token_movil]["data"].setdefault(sec_key, [])
         for f_obj in archivos_capturados:
-            f_obj.seek(0)
-            raw_bytes = f_obj.read()
+            # COMPRESIÓN DE IMAGEN PARA SALVAR LA RAM DE REPORTLAB
+            raw_bytes = compress_image(f_obj)
             sec_list.append(
                 {
                     "name": getattr(f_obj, "name", f"captura_{len(sec_list)+1}.jpg"),
@@ -393,12 +438,11 @@ if qp.get("movil") == "1" and qp.get("token"):
             "En la PC se integrarán automáticamente al generar el PDF."
         )
 
-    # Resumen de fotos ya enviadas desde el móvil en esta sesión
-    total_enviadas = sum(len(v) for v in mobile_store[token_movil].values())
+    total_enviadas = sum(len(v) for v in mobile_store[token_movil]["data"].values())
     if total_enviadas > 0:
         st.markdown("---")
         st.subheader(f"📂 Evidencias sincronizadas en esta consulta ({total_enviadas})")
-        for s_k, items_list in mobile_store[token_movil].items():
+        for s_k, items_list in mobile_store[token_movil]["data"].items():
             if items_list:
                 st.markdown(f"**{PHOTO_SECTIONS.get(s_k, s_k)}** ({len(items_list)} foto[s])")
                 cols_m = st.columns(min(3, len(items_list)))
@@ -407,7 +451,7 @@ if qp.get("movil") == "1" and qp.get("token"):
                         item_m["bytes"], caption=f"{item_m['name']} ({item_m['ts']})", use_container_width=True
                     )
         if st.button("🗑️ Limpiar todas las fotos enviadas desde el móvil", use_container_width=True):
-            mobile_store[token_movil] = {}
+            mobile_store[token_movil]["data"] = {}
             st.rerun()
 
     st.stop()
@@ -622,7 +666,7 @@ def renderizar_uploader(label: str, key: str) -> list:
     token_actual = st.session_state.get("sync_token", "")
     fotos_moviles = []
     if token_actual and token_actual in mobile_store:
-        fotos_moviles = mobile_store[token_actual].get(key, [])
+        fotos_moviles = mobile_store[token_actual].get("data", {}).get(key, [])
 
     badge_movil = f" · 📱 {len(fotos_moviles)} desde móvil" if fotos_moviles else ""
     with st.expander(f"📷 Anexar evidencia fotográfica ({label}){badge_movil}", expanded=bool(fotos_moviles)):
@@ -2020,7 +2064,7 @@ def build_via_text(d: dict) -> str:
     return "\n".join([line for line in lines if line.strip()]).upper()
 
 
-# ================= BARRA LATERAL (IDENTIDAD Y PORTAL MÓVIL QR ACTIVO) =================
+# ================= BARRA LATERAL (IDENTIDAD, ALERTAS Y PORTAL MÓVIL) =================
 with st.sidebar:
     logo_unam = asset_path("Banfield-Pet-Hospital.png")
     if logo_unam:
@@ -2030,6 +2074,12 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.caption("Reporte semestral · Plan de Bienestar")
+
+    # Mostrar errores de catálogos si existen (Evita silenciamiento)
+    if st.session_state.get("catalog_error"):
+        st.error(f"⚠️ Alerta Catálogos: {st.session_state['catalog_error']}")
+    if st.session_state.get("medicos_error"):
+        st.warning(f"⚠️ Alerta Médicos: {st.session_state['medicos_error']}")
 
     if st.button(
         "⚡ Pre-llenar Paciente Sano (Normal)",
@@ -2072,8 +2122,8 @@ with st.sidebar:
     st.markdown("<b class='banfield-text'>📱 Portal de Carga Móvil</b>", unsafe_allow_html=True)
     base_app_url = st.text_input(
         "URL pública de tu app Streamlit",
-        value="https://tu-hospital-pbb.streamlit.app",
-        help="Pega aquí la URL de tu app en Streamlit Cloud (o la IP local http://192.168.x.x:8501).",
+        value="https://semestral.streamlit.app/",
+        help="Esta URL se usará para generar el Código QR.",
     ).rstrip("/")
 
     if st.button("Generar Código QR", use_container_width=True):
@@ -2085,7 +2135,7 @@ with st.sidebar:
                     random.choices(string.ascii_uppercase + string.digits, k=6)
                 )
             token = st.session_state["sync_token"]
-            mobile_store.setdefault(token, {})
+            mobile_store.setdefault(token, {"timestamp": datetime.datetime.now(), "data": {}})
 
     if st.session_state.get("sync_token") and mascota.strip():
         token = st.session_state["sync_token"]
@@ -2095,7 +2145,7 @@ with st.sidebar:
         qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=180x180&data={urllib.parse.quote(url_movil)}"
         st.image(qr_api_url, caption=f"Escanea para sincronizar cámara con {mascota} (Token: {token})")
 
-        fotos_totales = sum(len(v) for v in mobile_store.get(token, {}).values())
+        fotos_totales = sum(len(v) for v in mobile_store.get(token, {}).get("data", {}).values())
         col_s1, col_s2 = st.columns(2)
         if col_s1.button("🔄 Sincronizar fotos", use_container_width=True):
             st.rerun()
