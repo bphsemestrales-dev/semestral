@@ -58,8 +58,22 @@ STATUS_OK_TXT = "#1B5E20"
 STATUS_WARN_TXT = "#E65100"
 STATUS_ALERT_TXT = "#B71C1C"
 
+# Escala BCS ordenada estrictamente del 1 al 9
+BCS_OPTIONS = [
+    "1/9 - Delgado / Bajo peso",
+    "2/9 - Delgado / Bajo peso",
+    "3/9 - Delgado / Bajo peso",
+    "4/9 - Peso ideal",
+    "5/9 - Peso ideal",
+    "6/9 - Sobrepeso",
+    "7/9 - Sobrepeso",
+    "8/9 - Obesidad",
+    "9/9 - Obesidad",
+    "No evaluado",
+    "Ninguno",
+]
+
 # Catálogo de secciones que aceptan evidencia fotográfica (PC y Móvil)
-# Ordenado ergonómicamente en móvil pero manteniendo todas las llaves intactas
 PHOTO_SECTIONS = {
     "foto_s6": "🦷 S6 · Dental / Oral",
     "foto_s2": "🐕 S2 · Pelo y Piel",
@@ -441,7 +455,6 @@ if qp.get("movil") == "1" and qp.get("token"):
         unsafe_allow_html=True,
     )
 
-    # PASO 1: Botones grandes táctiles para las 6 áreas más fotografiadas + selector rápido del resto
     st.markdown("##### 1️⃣ Toca el área que vas a fotografiar:")
     top_keys = ["foto_s6", "foto_s2", "foto_s8", "foto_s7", "foto_s1", "foto_lab"]
     other_keys = [k for k in PHOTO_SECTIONS.keys() if k not in top_keys]
@@ -492,7 +505,6 @@ if qp.get("movil") == "1" and qp.get("token"):
         unsafe_allow_html=True,
     )
 
-    # PASO 2: Captura directa con auto-envío inmediato
     up_key = f"mob_auto_up_{sec_key}_{st.session_state['mob_upload_counter']}"
     up_pics = st.file_uploader(
         f"📸 Toca aquí para abrir Cámara HD o Galería ({sec_label})",
@@ -542,7 +554,6 @@ if qp.get("movil") == "1" and qp.get("token"):
     if st.session_state.get("mob_last_msg"):
         st.success(st.session_state["mob_last_msg"])
 
-    # Galería de la sección actual y resumen general con botón de borrado individual
     fotos_seccion_actual = mobile_store[token_movil]["data"].get(sec_key, [])
     if fotos_seccion_actual:
         st.markdown(f"**Fotos en {sec_label} ({len(fotos_seccion_actual)}):**")
@@ -585,9 +596,7 @@ def classify_clinical_value(label: str, raw_val: str) -> str:
     if not raw_val:
         return "neutral"
     v = str(raw_val).strip().lower()
-    if "[  ]" in v or "____" in v:
-        return "neutral"
-    if v in ("—", "ninguno", "no evaluado", "no realizado", "no aplica", ""):
+    if not v or v in ("—", "ninguno", "no evaluado", "no realizado", "no aplica"):
         return "neutral"
 
     # Evaluación numérica especial para Tonometría PIO (10 a 25 mmHg)
@@ -610,9 +619,8 @@ def classify_clinical_value(label: str, raw_val: str) -> str:
         "excelente",
         "buena",
         "perfecto",
-        "4-5: peso ideal",
-        "4/9: peso ideal",
-        "5/9: peso ideal",
+        "4/9 - peso ideal",
+        "5/9 - peso ideal",
         "mantener dieta y porción actual (peso ideal)",
         "ninguno presente",
         "no presente",
@@ -629,10 +637,9 @@ def classify_clinical_value(label: str, raw_val: str) -> str:
             "grado 3",
             "grado 4",
             "grado 5",
-            "8-9: obesidad",
-            "8/9:",
-            "9/9:",
-            "1/9:",
+            "8/9 - obesidad",
+            "9/9 - obesidad",
+            "1/9 - delgado",
             "balanopostitis",
             "retenido",
             "aumentada o dolor",
@@ -659,12 +666,10 @@ def classify_clinical_value(label: str, raw_val: str) -> str:
             "grado ii",
             "grado 1",
             "grado 2",
-            "1-3: delgado",
-            "2/9:",
-            "3/9:",
-            "6-7: sobrepeso",
-            "6/9:",
-            "7/9:",
+            "2/9 - delgado",
+            "3/9 - delgado",
+            "6/9 - sobrepeso",
+            "7/9 - sobrepeso",
             "secreción",
             "dermatitis",
             "asimétrico",
@@ -684,6 +689,8 @@ def classify_clinical_value(label: str, raw_val: str) -> str:
 
 def format_badge_html(value_str: str, status: str) -> str:
     """Devuelve texto enriquecido para ReportLab con color semántico."""
+    if value_str == " ":
+        return ""
     escaped = html.escape(value_str).replace("\n", "<br/>") if value_str else "—"
     if status == "ok":
         return f"<font color='{STATUS_OK_TXT}'><b>●</b> {escaped}</font>"
@@ -701,7 +708,6 @@ def sync_quick_recommendations_to_textarea():
     adicional que el médico haya escrito manualmente.
     """
     current_text = st.session_state.get("recomendaciones", "") or ""
-    # Separar las líneas que son de casillas rápidas vs texto libre del médico
     all_quick_texts = {txt for _, txt in QUICK_RECOMMENDATIONS.values()}
     custom_lines = []
     for line in current_text.splitlines():
@@ -739,8 +745,8 @@ def auto_suggest_quick_recommendations(d: dict):
         st.session_state["rec_chk_oidos_piel"] = True
     # 4. Peso y Nutrición
     if any(
-        w in str(d.get("bcs_escala", "")).lower() for w in ("sobrepeso", "obesidad", "delgado", "bajo peso")
-    ) or d.get("peso") in ("Demasiado delgado", "Muy pesado"):
+        w in str(d.get("peso", "")).lower() for w in ("sobrepeso", "obesidad", "delgado", "bajo peso")
+    ):
         st.session_state["rec_chk_peso"] = True
     # 5. Cirugía Preventiva
     if d.get("estado_reproductivo") == "Entero(a)":
@@ -750,12 +756,11 @@ def auto_suggest_quick_recommendations(d: dict):
 
 
 def aplicar_paciente_sano_defaults():
-    """Pre-llena todos los campos clínicos (incluyendo los nuevos del Dr. Fausto) en estado Normal/Negativo."""
+    """Pre-llena todos los campos clínicos en estado Normal/Negativo (con BCS 5/9 - Peso ideal)."""
     defaults = {
         "mucosas_sel": "Rosas y húmedas",
         "cond_gral": "Excelente",
-        "peso": "Perfecto",
-        "bcs_escala": "4-5: Peso ideal",
+        "peso": "5/9 - Peso ideal",
         "plan_nutricional": "Mantener dieta y porción actual (peso ideal)",
         "pelo_piel": "Parece normal",
         "ectoparasitos": "Ninguno presente",
@@ -1046,6 +1051,8 @@ def add_labeled_rows(
                 ("BACKGROUND", (0, 0), (1, 0), colors.HexColor(LIGHT_BLUE)),
                 ("LINEBELOW", (0, 0), (1, 0), 1, colors.HexColor(BANFIELD_BLUE)),
                 ("LINEBELOW", (0, 1), (-1, -1), 0.5, colors.HexColor("#E5E9F0")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor(BORDER_GREY)),
+                ("INNERGRID", (0, 1), (-1, -1), 0.35, colors.HexColor(BORDER_GREY)),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 8),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 8),
@@ -1107,6 +1114,7 @@ def add_section_pdf(
     photo_list: list | None = None,
     two_column_grid: bool = True,
     hide_unassessed: bool = False,
+    is_blank: bool = False,
 ):
     icon_file = asset_path(icon_name) if icon_name else None
 
@@ -1155,7 +1163,26 @@ def add_section_pdf(
             story.append(foto_table)
             story.append(Spacer(1, 3))
 
-    if notes and clean_text(notes):
+    if is_blank:
+        note_box = Table(
+            [[Paragraph("<b>Notas:</b>", styles["Small"])]],
+            colWidths=[510],
+            rowHeights=[24],
+            hAlign="LEFT",
+        )
+        note_box.setStyle(
+            TableStyle(
+                [
+                    ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor(BORDER_GREY)),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ]
+            )
+        )
+        story.append(note_box)
+        story.append(Spacer(1, 3))
+    elif notes and clean_text(notes):
         story.append(Paragraph(f"<b>Notas:</b> {ptext(notes)}", styles["Body"]))
         story.append(Spacer(1, 3))
 
@@ -1163,7 +1190,7 @@ def add_section_pdf(
 
 
 def extraer_hallazgos_atencion(d: dict) -> list[str]:
-    """Auditoría clínica integral de las 15 secciones (incluyendo BCS, Urogenital por sexo, PIO y Marcha)."""
+    """Auditoría clínica integral de las 15 secciones (incluyendo BCS 1-9, Urogenital por sexo, PIO y Marcha)."""
     atencion = []
     triggers = [
         "anormal",
@@ -1213,9 +1240,8 @@ def extraer_hallazgos_atencion(d: dict) -> list[str]:
         "excelente",
         "buena",
         "perfecto",
-        "4-5: peso ideal",
-        "4/9: peso ideal",
-        "5/9: peso ideal",
+        "4/9 - peso ideal",
+        "5/9 - peso ideal",
         "mantener dieta y porción actual (peso ideal)",
         "dentro de límites normales",
         "rosas y húmedas",
@@ -1240,8 +1266,7 @@ def extraer_hallazgos_atencion(d: dict) -> list[str]:
 
     check("coloración de mucosas", d.get("mucosas"))
     check("condición general", d.get("cond_gral"))
-    check("condición de peso", d.get("peso"))
-    check("condición corporal (BCS)", d.get("bcs_escala"))
+    check("condición corporal / peso (BCS)", d.get("peso"))
     check("pelo y piel", d.get("pelo_piel"))
     if d.get("planos_por_lesion"):
         atencion.append("lesiones dermatológicas")
@@ -1319,10 +1344,11 @@ def extraer_hallazgos_atencion(d: dict) -> list[str]:
     check("evaluación de la marcha", d.get("tipo_marcha"))
     for k_neuro in ("ment", "cran", "prop", "patel", "dolor"):
         check("examen neurológico", d.get(k_neuro))
-    check("frecuencia cardiovascular", d.get("f_car"))
+    check("frecuencia cardiaca", d.get("f_car"))
     check("pulso", d.get("pul_car"))
     check("soplo", d.get("sop_car"))
     check("ritmo cardiaco", d.get("rit_car"))
+    check("tiempo de llenado capilar", d.get("tllc_car"))
     for k_pul in ("cd", "cad", "ci", "cai"):
         check("campos pulmonares", d.get(k_pul))
     check("leucemia felina", d.get("leu"))
@@ -1352,14 +1378,7 @@ def extraer_hallazgos_atencion(d: dict) -> list[str]:
 
 def generar_resumen_narrativo(d: dict, styles: dict) -> list:
     if d.get("_is_blank_template"):
-        p_txt = (
-            "<b>Dictamen general del Examen Semestral (Generado automáticamente por el sistema según hallazgos):</b><br/><br/>"
-            "[  ] <b>Exploración satisfactoria:</b> Todas las constantes vitales y sistemas evaluados se encuentran dentro de parámetros saludables y normales.<br/><br/>"
-            "[  ] <b>Áreas que requieren monitoreo o atención médica específica:</b><br/>"
-            "____________________________________________________________________________________________________________<br/>"
-            "____________________________________________________________________________________________________________"
-        )
-        return [Paragraph(p_txt, styles["Plan"])]
+        return [Spacer(1, 45)]
 
     atencion = extraer_hallazgos_atencion(d)
     elements = []
@@ -1451,6 +1470,7 @@ def regular_footer(canvas, doc):
 
 
 def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = False) -> bytes:
+    is_blank = bool(data.get("_is_blank_template"))
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -1634,13 +1654,22 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
     story.append(wrapper_blue)
     story.append(Spacer(1, 15))
 
-    c_data = (
-        f"Mascota: {ptext(data['mascota'])} (Especie: {ptext(data['especie'])} · "
-        f"Sexo: {ptext(data.get('sexo', ''))} · {ptext(data.get('estado_reproductivo', ''))})<br/>"
-        f"Propietario: {ptext(data['familia'])}<br/>"
-        f"Edad: {ptext(data['edad'])}<br/>"
-        f"Fecha: {ptext(data['fecha'])}"
-    )
+    if is_blank:
+        c_data = (
+            f"Mascota: ________________________ (Especie: {ptext(data['especie'])} · "
+            f"Sexo: {ptext(data.get('sexo', ''))} · {ptext(data.get('estado_reproductivo', ''))})<br/>"
+            "Propietario: ________________________<br/>"
+            "Edad: ________________________<br/>"
+            "Fecha: ________________________"
+        )
+    else:
+        c_data = (
+            f"Mascota: {ptext(data['mascota'])} (Especie: {ptext(data['especie'])} · "
+            f"Sexo: {ptext(data.get('sexo', ''))} · {ptext(data.get('estado_reproductivo', ''))})<br/>"
+            f"Propietario: {ptext(data['familia'])}<br/>"
+            f"Edad: {ptext(data['edad'])}<br/>"
+            f"Fecha: {ptext(data['fecha'])}"
+        )
     story.append(Paragraph(c_data, styles["CoverData"]))
 
     txt_intro = (
@@ -1672,16 +1701,24 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
     # ================= RESULTADOS CLÍNICOS =================
     story.append(Paragraph("RESULTADOS DEL EXAMEN FÍSICO", styles["Title"]))
 
-    s_constantes = [
-        ("Peso", f"{ptext(data['peso_kg'])} kg"),
-        ("Frecuencia cardiaca", f"{ptext(data['fc'])} lpm"),
-        ("Frecuencia respiratoria", f"{ptext(data['fr'])} rpm"),
-        ("Temperatura", f"{ptext(data['temp'])} °C"),
-        ("TLLC", f"{ptext(data['tllc'])} segundos"),
-        ("Mucosas", f"{ptext(data['mucosas'])}"),
-        ("SpO2", f"{ptext(data['spo2'])}"),
-        ("PAM", f"{ptext(data['pam'])}"),
-    ]
+    if is_blank:
+        s_constantes = [
+            ("Peso (kg)", " "),
+            ("Frecuencia cardiaca (lpm)", " "),
+            ("Frecuencia respiratoria (rpm)", " "),
+            ("Temperatura (°C)", " "),
+            ("TLLC (segundos)", " "),
+            ("Mucosas", " "),
+        ]
+    else:
+        s_constantes = [
+            ("Peso", f"{ptext(data['peso_kg'])} kg" if clean_text(data["peso_kg"]) else "—"),
+            ("Frecuencia cardiaca", f"{ptext(data['fc'])} lpm" if clean_text(data["fc"]) else "—"),
+            ("Frecuencia respiratoria", f"{ptext(data['fr'])} rpm" if clean_text(data["fr"]) else "—"),
+            ("Temperatura", f"{ptext(data['temp'])} °C" if clean_text(data["temp"]) else "—"),
+            ("TLLC", f"{ptext(data['tllc'])} segundos" if clean_text(data["tllc"]) else "—"),
+            ("Mucosas", f"{ptext(data['mucosas'])}"),
+        ]
     add_section_pdf(
         story,
         "Constantes Fisiológicas",
@@ -1692,22 +1729,30 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         photo_list=data.get("foto_constantes"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     s1_cond = [
-        ("Condición general", f"{ptext(data['cond_gral'])}"),
-        ("Condición de peso", f"{ptext(data['peso'])}"),
-        ("Condición Corporal (BCS 1-9)", f"{ptext(data.get('bcs_escala'))}"),
+        ("Condición general", " " if is_blank else f"{ptext(data['cond_gral'])}"),
+        ("Condición corporal / peso (BCS 1-9)", " " if is_blank else f"{ptext(data['peso'])}"),
     ]
     s1_nutri = []
-    if clean_text(data.get("plan_nutricional")):
-        s1_nutri.append(("Indicaciones de dieta / porción", f"{ptext(data.get('plan_nutricional'))}"))
-    if data["alim_seco"] and clean_text(data["alim_seco"]):
-        s1_nutri.append(("Alimento seco", f"{ptext(data['alim_seco'])}"))
-    if data["alim_humedo"] and clean_text(data["alim_humedo"]):
-        s1_nutri.append(("Alimento húmedo", f"{ptext(data['alim_humedo'])}"))
-    if data["nutra"] and clean_text(data["nutra"]):
-        s1_nutri.append(("Nutracéuticos", f"{ptext(data['nutra'])}"))
+    if is_blank:
+        s1_nutri = [
+            ("Indicación sobre dieta y porción", " "),
+            ("Alimento seco sugerido", " "),
+            ("Alimento húmedo sugerido", " "),
+            ("Nutracéuticos / Complementos", " "),
+        ]
+    else:
+        if clean_text(data.get("plan_nutricional")):
+            s1_nutri.append(("Indicación sobre dieta y porción", f"{ptext(data.get('plan_nutricional'))}"))
+        if data["alim_seco"] and clean_text(data["alim_seco"]):
+            s1_nutri.append(("Alimento seco", f"{ptext(data['alim_seco'])}"))
+        if data["alim_humedo"] and clean_text(data["alim_humedo"]):
+            s1_nutri.append(("Alimento húmedo", f"{ptext(data['alim_humedo'])}"))
+        if data["nutra"] and clean_text(data["nutra"]):
+            s1_nutri.append(("Nutracéuticos", f"{ptext(data['nutra'])}"))
 
     s1_agrupado = [("Condición Corporal", s1_cond)]
     if s1_nutri:
@@ -1722,23 +1767,37 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         photo_list=data.get("foto_s1"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
-    s2_derma = [("Pelo y piel", f"{ptext(data['pelo_piel'])}")]
-    if data["planos_por_lesion"]:
-        s2_derma.append(("Lesiones y planos afectados", "<br/>".join(data["planos_por_lesion"])))
-    if data["rec_piel"] and clean_text(data["rec_piel"]):
-        s2_derma.append(("Producto dermatológico", f"{ptext(data['rec_piel'])}"))
-    if data["shampoo_rec"] and clean_text(data["shampoo_rec"]):
-        s2_derma.append(("Shampoo sugerido", f"{ptext(data['shampoo_rec'])}"))
+    if is_blank:
+        s2_derma = [
+            ("Pelo y piel", " "),
+            ("Lesiones y planos anatómicos afectados", " "),
+            ("Producto dermatológico recomendado", " "),
+            ("Shampoo sugerido", " "),
+        ]
+        s2_paras = [
+            ("Ectoparásitos", " "),
+            ("Control antipulgas recetado", " "),
+            ("Plan de control antipulgas", " "),
+        ]
+    else:
+        s2_derma = [("Pelo y piel", f"{ptext(data['pelo_piel'])}")]
+        if data["planos_por_lesion"]:
+            s2_derma.append(("Lesiones y planos afectados", "<br/>".join(data["planos_por_lesion"])))
+        if data["rec_piel"] and clean_text(data["rec_piel"]):
+            s2_derma.append(("Producto dermatológico", f"{ptext(data['rec_piel'])}"))
+        if data["shampoo_rec"] and clean_text(data["shampoo_rec"]):
+            s2_derma.append(("Shampoo sugerido", f"{ptext(data['shampoo_rec'])}"))
 
-    s2_paras = [
-        ("Ectoparásitos", f"{ptext(data['ectoparasitos'])}"),
-        ("Control recetado", f"{ptext(data['c_pulgas'])}"),
-    ]
-    if data["trat_pulgas"]:
-        plan_str = ptext(data["trat_pulgas"]).replace("\n", "<br/>")
-        s2_paras.append(("Plan a seguir", plan_str))
+        s2_paras = [
+            ("Ectoparásitos", f"{ptext(data['ectoparasitos'])}"),
+            ("Control recetado", f"{ptext(data['c_pulgas'])}"),
+        ]
+        if data["trat_pulgas"]:
+            plan_str = ptext(data["trat_pulgas"]).replace("\n", "<br/>")
+            s2_paras.append(("Plan a seguir", plan_str))
 
     add_section_pdf(
         story,
@@ -1750,20 +1809,21 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         photo_list=data.get("foto_s2"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     s3_abd = [
-        ("Hígado", f"{ptext(data['hig'])}"),
-        ("Estómago", f"{ptext(data['est'])}"),
-        ("Bazo", f"{ptext(data['bazo'])}"),
+        ("Hígado", " " if is_blank else f"{ptext(data['hig'])}"),
+        ("Estómago", " " if is_blank else f"{ptext(data['est'])}"),
+        ("Bazo", " " if is_blank else f"{ptext(data['bazo'])}"),
     ]
     s3_rin = [
-        ("Riñón derecho", f"{ptext(data['rd'])}"),
-        ("Riñón izquierdo", f"{ptext(data['ri'])}"),
+        ("Riñón derecho", " " if is_blank else f"{ptext(data['rd'])}"),
+        ("Riñón izquierdo", " " if is_blank else f"{ptext(data['ri'])}"),
     ]
     s3_int = [
-        ("Intestinos / mesenterio", f"{ptext(data['int_mes'])}"),
-        ("Impresión general", f"{ptext(data['imp_gral'])}"),
+        ("Intestinos / mesenterio", " " if is_blank else f"{ptext(data['int_mes'])}"),
+        ("Impresión general", " " if is_blank else f"{ptext(data['imp_gral'])}"),
     ]
     add_section_pdf(
         story,
@@ -1779,29 +1839,33 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         photo_list=data.get("foto_s3"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     s4_uro = [
-        ("Secreción urogenital", f"{ptext(data['secr_uro'])}"),
-        ("Inflamación / infección", f"{ptext(data['infl_uro'])}"),
-        ("Bultos / crecimientos", f"{ptext(data['bult_uro'])}"),
-        ("Tumores mamarios", f"{ptext(data['tum_mam'])}"),
+        ("Secreción urogenital", " " if is_blank else f"{ptext(data['secr_uro'])}"),
+        ("Inflamación / infección", " " if is_blank else f"{ptext(data['infl_uro'])}"),
+        ("Bultos / crecimientos", " " if is_blank else f"{ptext(data['bult_uro'])}"),
+        ("Tumores mamarios", " " if is_blank else f"{ptext(data['tum_mam'])}"),
     ]
     # Campos condicionales por Sexo / Estado Reproductivo / Especie
     if data.get("sexo") == "Macho":
-        s4_uro.append(("Pene y prepucio", f"{ptext(data.get('uro_pene_prepucio'))}"))
+        s4_uro.append(("Pene y prepucio", " " if is_blank else f"{ptext(data.get('uro_pene_prepucio'))}"))
         if data.get("estado_reproductivo") == "Entero(a)":
-            s4_uro.append(("Testículos y escroto", f"{ptext(data.get('uro_testiculos'))}"))
+            s4_uro.append(("Testículos y escroto", " " if is_blank else f"{ptext(data.get('uro_testiculos'))}"))
         if data.get("especie") == "Canino":
-            s4_uro.append(("Evaluación de próstata", f"{ptext(data.get('uro_prostata_macho'))}"))
+            s4_uro.append(("Evaluación de próstata", " " if is_blank else f"{ptext(data.get('uro_prostata_macho'))}"))
     elif data.get("sexo") == "Hembra":
-        s4_uro.append(("Vulva y área perivulvar", f"{ptext(data.get('uro_vulva'))}"))
-        cad_mam = ptext(data.get("uro_cadena_mamaria"))
-        if clean_text(data.get("uro_detalle_mamas")):
-            cad_mam += f" ({ptext(data.get('uro_detalle_mamas'))})"
-        s4_uro.append(("Cadena mamaria individualizada", cad_mam))
+        s4_uro.append(("Vulva y área perivulvar", " " if is_blank else f"{ptext(data.get('uro_vulva'))}"))
+        if is_blank:
+            s4_uro.append(("Cadena mamaria individualizada", " "))
+        else:
+            cad_mam = ptext(data.get("uro_cadena_mamaria"))
+            if clean_text(data.get("uro_detalle_mamas")):
+                cad_mam += f" ({ptext(data.get('uro_detalle_mamas'))})"
+            s4_uro.append(("Cadena mamaria individualizada", cad_mam))
         if data.get("estado_reproductivo") == "Entero(a)":
-            s4_uro.append(("Fecha aprox. de último celo", f"{ptext(data.get('uro_ultimo_celo'))}"))
+            s4_uro.append(("Fecha aprox. de último celo", " " if is_blank else f"{ptext(data.get('uro_ultimo_celo'))}"))
 
     add_section_pdf(
         story,
@@ -1812,13 +1876,14 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         photo_list=data.get("foto_s4"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     s5_rect = [
-        ("Próstata / recto", f"{ptext(data['pros'])}"),
-        ("Tumores / crecimientos", f"{ptext(data['tum_rect'])}"),
-        ("Hernias / hinchazón", f"{ptext(data['hern'])}"),
-        ("Sacos anales", f"{ptext(data['sacos'])}"),
+        ("Próstata / recto", " " if is_blank else f"{ptext(data['pros'])}"),
+        ("Tumores / crecimientos", " " if is_blank else f"{ptext(data['tum_rect'])}"),
+        ("Hernias / hinchazón", " " if is_blank else f"{ptext(data['hern'])}"),
+        ("Sacos anales", " " if is_blank else f"{ptext(data['sacos'])}"),
     ]
     add_section_pdf(
         story,
@@ -1829,37 +1894,40 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         photo_list=data.get("foto_s5"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     s6_dientes = [
-        ("Enfermedad Periodontal (EPO)", f"{ptext(data['epo'])}"),
-        ("Sarro", f"{ptext(data['sarro'])}"),
-        ("Mordida", f"{ptext(data['mord'])}"),
-        ("Decoloración dental", f"{ptext(data['decol_d'])}"),
+        ("Enfermedad Periodontal (EPO)", " " if is_blank else f"{ptext(data['epo'])}"),
+        ("Sarro", " " if is_blank else f"{ptext(data['sarro'])}"),
+        ("Mordida", " " if is_blank else f"{ptext(data['mord'])}"),
+        ("Decoloración dental", " " if is_blank else f"{ptext(data['decol_d'])}"),
     ]
     s6_encias = [
-        ("Hinchazón de encías", f"{ptext(data['hinc_e'])}"),
-        ("Encías retraídas", f"{ptext(data['retr_e'])}"),
-        ("Infección de encías", f"{ptext(data['inf_e'])}"),
-        ("Tumores / épulis", f"{ptext(data['epul_e'])}"),
+        ("Hinchazón de encías", " " if is_blank else f"{ptext(data['hinc_e'])}"),
+        ("Encías retraídas", " " if is_blank else f"{ptext(data['retr_e'])}"),
+        ("Infección de encías", " " if is_blank else f"{ptext(data['inf_e'])}"),
+        ("Tumores / épulis", " " if is_blank else f"{ptext(data['epul_e'])}"),
     ]
     s6_boca = [
-        ("Amígdalas (Inflamación)", f"{ptext(data['inf_a'])}"),
-        ("Amígdalas (Hinchazón)", f"{ptext(data['hinc_a'])}"),
-        ("Lengua (Inflamación)", f"{ptext(data['inf_l'])}"),
-        ("Lengua (Decoloración)", f"{ptext(data['dec_l'])}"),
-        ("Lengua (Hinchazón)", f"{ptext(data['hinc_l'])}"),
-        ("Nódulos linfáticos", f"{ptext(data['tal_n'])}"),
-        ("Consistencia de nódulos", f"{ptext(data['con_n'])}"),
-        ("Inflamación de garganta", f"{ptext(data['inf_g'])}"),
-        ("Reflejos faríngeos", f"{ptext(data['ref_g'])}"),
+        ("Amígdalas (Inflamación)", " " if is_blank else f"{ptext(data['inf_a'])}"),
+        ("Amígdalas (Hinchazón)", " " if is_blank else f"{ptext(data['hinc_a'])}"),
+        ("Lengua (Inflamación)", " " if is_blank else f"{ptext(data['inf_l'])}"),
+        ("Lengua (Decoloración)", " " if is_blank else f"{ptext(data['dec_l'])}"),
+        ("Lengua (Hinchazón)", " " if is_blank else f"{ptext(data['hinc_l'])}"),
+        ("Nódulos linfáticos", " " if is_blank else f"{ptext(data['tal_n'])}"),
+        ("Consistencia de nódulos", " " if is_blank else f"{ptext(data['con_n'])}"),
+        ("Inflamación de garganta", " " if is_blank else f"{ptext(data['inf_g'])}"),
+        ("Reflejos faríngeos", " " if is_blank else f"{ptext(data['ref_g'])}"),
     ]
     s6_agrupado = [
         ("Dientes y Enfermedad", s6_dientes),
         ("Encías", s6_encias),
         ("Amígdalas, Lengua y Garganta", s6_boca),
     ]
-    if data["rec_dental"] and clean_text(data["rec_dental"]):
+    if is_blank:
+        s6_agrupado.append(("Recomendación Médica", [("Producto(s) sugerido(s)", " ")]))
+    elif data["rec_dental"] and clean_text(data["rec_dental"]):
         s6_agrupado.append(
             ("Recomendación Médica", [("Producto(s) sugerido(s)", f"{ptext(data['rec_dental'])}")])
         )
@@ -1874,6 +1942,7 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         photo_list=data.get("foto_s6"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
     add_info_box(
         story,
@@ -1882,25 +1951,31 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         styles,
     )
 
-    pio_od_str = f"{ptext(data.get('pio_od'))} mmHg (Ref. 10-25)" if clean_text(data.get("pio_od")) else "—"
-    pio_oi_str = f"{ptext(data.get('pio_oi'))} mmHg (Ref. 10-25)" if clean_text(data.get("pio_oi")) else "—"
+    if is_blank:
+        pio_od_str = " "
+        pio_oi_str = " "
+    else:
+        pio_od_str = f"{ptext(data.get('pio_od'))} mmHg (Ref. 10-25)" if clean_text(data.get("pio_od")) else "—"
+        pio_oi_str = f"{ptext(data.get('pio_oi'))} mmHg (Ref. 10-25)" if clean_text(data.get("pio_oi")) else "—"
 
     s7_od = [
-        ("Conjuntiva OD", f"{ptext(data['conj_od'])}"),
-        ("Secreción OD", f"{ptext(data['sec_od'])}"),
-        ("Deformidad párpados OD", f"{ptext(data['def_od'])}"),
-        ("Tumores/quistes OD", f"{ptext(data['tum_od'])}"),
-        ("Presión Intraocular (PIO) OD", pio_od_str),
+        ("Conjuntiva OD", " " if is_blank else f"{ptext(data['conj_od'])}"),
+        ("Secreción OD", " " if is_blank else f"{ptext(data['sec_od'])}"),
+        ("Deformidad párpados OD", " " if is_blank else f"{ptext(data['def_od'])}"),
+        ("Tumores/quistes OD", " " if is_blank else f"{ptext(data['tum_od'])}"),
+        ("Presión Intraocular (PIO) OD [mmHg]", pio_od_str),
     ]
     s7_oi = [
-        ("Conjuntiva OI", f"{ptext(data['conj_oi'])}"),
-        ("Secreción OI", f"{ptext(data['sec_oi'])}"),
-        ("Deformidad párpados OI", f"{ptext(data['def_oi'])}"),
-        ("Tumores/quistes OI", f"{ptext(data['tum_oi'])}"),
-        ("Presión Intraocular (PIO) OI", pio_oi_str),
+        ("Conjuntiva OI", " " if is_blank else f"{ptext(data['conj_oi'])}"),
+        ("Secreción OI", " " if is_blank else f"{ptext(data['sec_oi'])}"),
+        ("Deformidad párpados OI", " " if is_blank else f"{ptext(data['def_oi'])}"),
+        ("Tumores/quistes OI", " " if is_blank else f"{ptext(data['tum_oi'])}"),
+        ("Presión Intraocular (PIO) OI [mmHg]", pio_oi_str),
     ]
     s7_agrupado = [("Oftálmico (Ojo Derecho)", s7_od), ("Oftálmico (Ojo Izquierdo)", s7_oi)]
-    if data["rec_oftalmica"] and clean_text(data["rec_oftalmica"]):
+    if is_blank:
+        s7_agrupado.append(("Recomendación", [("Producto oftalmológico", " ")]))
+    elif data["rec_oftalmica"] and clean_text(data["rec_oftalmica"]):
         s7_agrupado.append(
             ("Recomendación", [("Producto oftalmológico", f"{ptext(data['rec_oftalmica'])}")])
         )
@@ -1913,26 +1988,29 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         photo_list=data.get("foto_s7"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     s8_od = [
-        ("Orejas OD", f"{ptext(data['ore_od'])}"),
-        ("Membrana timpánica OD", f"{ptext(data['tim_od'])}"),
-        ("Ácaros OD", f"{ptext(data['aca_od'])}"),
-        ("Tumores/quistes OD", f"{ptext(data['tum_oido_od'])}"),
-        ("Inflamación OD", f"{ptext(data['inf_oido_od'])}"),
-        ("Secreción ótica OD", f"{ptext(data['sec_oido_od'])}"),
+        ("Orejas OD", " " if is_blank else f"{ptext(data['ore_od'])}"),
+        ("Membrana timpánica OD", " " if is_blank else f"{ptext(data['tim_od'])}"),
+        ("Ácaros OD", " " if is_blank else f"{ptext(data['aca_od'])}"),
+        ("Tumores/quistes OD", " " if is_blank else f"{ptext(data['tum_oido_od'])}"),
+        ("Inflamación OD", " " if is_blank else f"{ptext(data['inf_oido_od'])}"),
+        ("Secreción ótica OD", " " if is_blank else f"{ptext(data['sec_oido_od'])}"),
     ]
     s8_oi = [
-        ("Orejas OI", f"{ptext(data['ore_oi'])}"),
-        ("Membrana timpánica OI", f"{ptext(data['tim_oi'])}"),
-        ("Ácaros OI", f"{ptext(data['aca_oi'])}"),
-        ("Tumores/quistes OI", f"{ptext(data['tum_oido_oi'])}"),
-        ("Inflamación OI", f"{ptext(data['inf_oido_oi'])}"),
-        ("Secreción ótica OI", f"{ptext(data['sec_oido_oi'])}"),
+        ("Orejas OI", " " if is_blank else f"{ptext(data['ore_oi'])}"),
+        ("Membrana timpánica OI", " " if is_blank else f"{ptext(data['tim_oi'])}"),
+        ("Ácaros OI", " " if is_blank else f"{ptext(data['aca_oi'])}"),
+        ("Tumores/quistes OI", " " if is_blank else f"{ptext(data['tum_oido_oi'])}"),
+        ("Inflamación OI", " " if is_blank else f"{ptext(data['inf_oido_oi'])}"),
+        ("Secreción ótica OI", " " if is_blank else f"{ptext(data['sec_oido_oi'])}"),
     ]
     s8_agrupado = [("Otoscópico (Oído Derecho)", s8_od), ("Otoscópico (Oído Izquierdo)", s8_oi)]
-    if data["rec_otica"] and clean_text(data["rec_otica"]):
+    if is_blank:
+        s8_agrupado.append(("Recomendación", [("Producto otológico", " ")]))
+    elif data["rec_otica"] and clean_text(data["rec_otica"]):
         s8_agrupado.append(
             ("Recomendación", [("Producto otológico", f"{ptext(data['rec_otica'])}")])
         )
@@ -1946,28 +2024,33 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         photo_list=data.get("foto_s8"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     s9_col = [
-        ("Cuello y cabeza", f"{ptext(data['cue'])}"),
-        ("Espalda", f"{ptext(data['esp'])}"),
-        ("Cola", f"{ptext(data['cola'])}"),
+        ("Cuello y cabeza", " " if is_blank else f"{ptext(data['cue'])}"),
+        ("Espalda", " " if is_blank else f"{ptext(data['esp'])}"),
+        ("Cola", " " if is_blank else f"{ptext(data['cola'])}"),
     ]
     s9_mie = [
-        ("Miembro anterior derecho", f"{ptext(data['mad'])}"),
-        ("Miembro anterior izquierdo", f"{ptext(data['mai'])}"),
-        ("Miembro posterior derecho", f"{ptext(data['mpd'])}"),
-        ("Miembro posterior izquierdo", f"{ptext(data['mpi'])}"),
+        ("Miembro anterior derecho", " " if is_blank else f"{ptext(data['mad'])}"),
+        ("Miembro anterior izquierdo", " " if is_blank else f"{ptext(data['mai'])}"),
+        ("Miembro posterior derecho", " " if is_blank else f"{ptext(data['mpd'])}"),
+        ("Miembro posterior izquierdo", " " if is_blank else f"{ptext(data['mpi'])}"),
     ]
-    s9_marcha = [("Tipo de marcha", f"{ptext(data.get('tipo_marcha'))}")]
-    if any(
-        w in str(data.get("tipo_marcha", ""))
-        for w in ("Claudicación / Renguea", "Dificultad para levantarse / Rigidez")
-    ):
-        if clean_text(data.get("miembro_claudicacion")):
-            s9_marcha.append(("Miembro(s) afectado(s)", f"{ptext(data.get('miembro_claudicacion'))}"))
-        if clean_text(data.get("grado_claudicacion")):
-            s9_marcha.append(("Grado de claudicación (1-5)", f"{ptext(data.get('grado_claudicacion'))}"))
+    if is_blank:
+        s9_marcha = [
+            ("Tipo de marcha", " "),
+            ("Miembro(s) afectado(s) (si aplica)", " "),
+            ("Grado de claudicación (1 al 5)", " "),
+        ]
+    else:
+        s9_marcha = [("Tipo de marcha", f"{ptext(data.get('tipo_marcha'))}")]
+        if data.get("tipo_marcha") in ("Claudicación / Renguea", "Dificultad para levantarse / Rigidez"):
+            if clean_text(data.get("miembro_claudicacion")):
+                s9_marcha.append(("Miembro(s) afectado(s)", f"{ptext(data.get('miembro_claudicacion'))}"))
+            if clean_text(data.get("grado_claudicacion")):
+                s9_marcha.append(("Grado de claudicación (1-5)", f"{ptext(data.get('grado_claudicacion'))}"))
 
     s9_agrupado = [
         ("Columna y Anexos", s9_col),
@@ -1984,17 +2067,18 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         photo_list=data.get("foto_s9"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     s10_gral = [
-        ("Estado mental", f"{ptext(data['ment'])}"),
-        ("Nervios craneales", f"{ptext(data['cran'])}"),
+        ("Estado mental", " " if is_blank else f"{ptext(data['ment'])}"),
+        ("Nervios craneales", " " if is_blank else f"{ptext(data['cran'])}"),
     ]
     s10_ref = [
-        ("Reflejos propioceptivos", f"{ptext(data['prop'])}"),
-        ("Reflejos patelares", f"{ptext(data['patel'])}"),
-        ("Dolor a la digitopresión", f"{ptext(data['dolor'])}"),
-        ("Región del dolor", f"{ptext(data['reg_dolor'])}"),
+        ("Reflejos propioceptivos", " " if is_blank else f"{ptext(data['prop'])}"),
+        ("Reflejos patelares", " " if is_blank else f"{ptext(data['patel'])}"),
+        ("Dolor a la digitopresión", " " if is_blank else f"{ptext(data['dolor'])}"),
+        ("Región del dolor", " " if is_blank else f"{ptext(data['reg_dolor'])}"),
     ]
     add_section_pdf(
         story,
@@ -2005,14 +2089,15 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         photo_list=data.get("foto_s10"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     s11_cv = [
-        ("Frecuencia cardiovascular", f"{ptext(data['f_car'])}"),
-        ("Pulso", f"{ptext(data['pul_car'])}"),
-        ("Soplo o sonido anormal", f"{ptext(data['sop_car'])}"),
-        ("Ritmo", f"{ptext(data['rit_car'])}"),
-        ("TLLC cardiovascular", f"{ptext(data['tllc_car'])}"),
+        ("Frecuencia cardiaca", " " if is_blank else f"{ptext(data['f_car'])}"),
+        ("Pulso", " " if is_blank else f"{ptext(data['pul_car'])}"),
+        ("Soplo o sonido anormal", " " if is_blank else f"{ptext(data['sop_car'])}"),
+        ("Ritmo", " " if is_blank else f"{ptext(data['rit_car'])}"),
+        ("Tiempo de Llenado Capilar", " " if is_blank else f"{ptext(data['tllc_car'])}"),
     ]
     add_section_pdf(
         story,
@@ -2023,13 +2108,14 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         notes=data.get("notas_s11"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     s12_pul = [
-        ("Craneal derecho", f"{ptext(data['cd'])}"),
-        ("Caudal derecho", f"{ptext(data['cad'])}"),
-        ("Craneal izquierdo", f"{ptext(data['ci'])}"),
-        ("Caudal izquierdo", f"{ptext(data['cai'])}"),
+        ("Craneal derecho", " " if is_blank else f"{ptext(data['cd'])}"),
+        ("Caudal derecho", " " if is_blank else f"{ptext(data['cad'])}"),
+        ("Craneal izquierdo", " " if is_blank else f"{ptext(data['ci'])}"),
+        ("Caudal izquierdo", " " if is_blank else f"{ptext(data['cai'])}"),
     ]
     add_section_pdf(
         story,
@@ -2040,15 +2126,16 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         data["notas_s12"],
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     if data["especie"] == "Felino":
         s13_items = [
-            ("Leucemia felina", f"{ptext(data['leu'])}"),
-            ("SIDA felino", f"{ptext(data['sida'])}"),
+            ("Leucemia felina", " " if is_blank else f"{ptext(data['leu'])}"),
+            ("SIDA felino", " " if is_blank else f"{ptext(data['sida'])}"),
         ]
     else:
-        s13_items = [("Hemoparásitos caninos", f"{ptext(data['hemo'])}")]
+        s13_items = [("Hemoparásitos caninos", " " if is_blank else f"{ptext(data['hemo'])}")]
 
     add_section_pdf(
         story,
@@ -2059,15 +2146,16 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         notes=data.get("notas_s13"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     s14_items = [
-        ("Toxocara", f"{ptext(data['tox'])}"),
-        ("Coccidia", f"{ptext(data['coc'])}"),
-        ("Nemátodos", f"{ptext(data['nem'])}"),
-        ("Giardia", f"{ptext(data['gia'])}"),
-        ("Dypilidium", f"{ptext(data['gyp'])}"),
-        ("Céstodos", f"{ptext(data['ces'])}"),
+        ("Toxocara", " " if is_blank else f"{ptext(data['tox'])}"),
+        ("Coccidia", " " if is_blank else f"{ptext(data['coc'])}"),
+        ("Nemátodos", " " if is_blank else f"{ptext(data['nem'])}"),
+        ("Giardia", " " if is_blank else f"{ptext(data['gia'])}"),
+        ("Dypilidium", " " if is_blank else f"{ptext(data['gyp'])}"),
+        ("Céstodos", " " if is_blank else f"{ptext(data['ces'])}"),
     ]
     add_section_pdf(
         story,
@@ -2077,32 +2165,38 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         notes=data.get("notas_s14"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     s15_hemo = [
-        ("Conteo de eritrocitos", f"{ptext(data['eritrocitos'])}"),
-        ("Conteo de leucocitos", f"{ptext(data['leucocitos_s'])}"),
-        ("Prueba de Tiroides", f"{ptext(data['tiroides'])}"),
-        ("Enzimas renales", f"{ptext(data['enz_ren'])}"),
-        ("Enzimas hepáticas", f"{ptext(data['enz_hep'])}"),
-        ("Enzimas pancreáticas", f"{ptext(data['enz_pan'])}"),
-        ("Electrólitos", f"{ptext(data['electrolitos'])}"),
-        ("Proteínas séricas", f"{ptext(data['prot_ser'])}"),
+        ("Conteo de eritrocitos", " " if is_blank else f"{ptext(data['eritrocitos'])}"),
+        ("Conteo de leucocitos", " " if is_blank else f"{ptext(data['leucocitos_s'])}"),
+        ("Prueba de Tiroides", " " if is_blank else f"{ptext(data['tiroides'])}"),
+        ("Enzimas renales", " " if is_blank else f"{ptext(data['enz_ren'])}"),
+        ("Enzimas hepáticas", " " if is_blank else f"{ptext(data['enz_hep'])}"),
+        ("Enzimas pancreáticas", " " if is_blank else f"{ptext(data['enz_pan'])}"),
+        ("Electrólitos", " " if is_blank else f"{ptext(data['electrolitos'])}"),
+        ("Proteínas séricas", " " if is_blank else f"{ptext(data['prot_ser'])}"),
     ]
     s15_uro = [
-        ("Urobilinógeno", f"{ptext(data['uro_urobilinogeno'])}"),
-        ("Sangre (Uroanálisis)", f"{ptext(data['uro_sangre'])}"),
-        ("Bilirrubina", f"{ptext(data['uro_bilirrubina'])}"),
-        ("Cetona", f"{ptext(data['uro_cetona'])}"),
-        ("Proteína (Uroanálisis)", f"{ptext(data['uro_proteina'])}"),
-        ("pH", f"{ptext(data['uro_ph'])}"),
-        ("Gravedad específica", f"{ptext(data['uro_gravedad'])}"),
+        ("Urobilinógeno", " " if is_blank else f"{ptext(data['uro_urobilinogeno'])}"),
+        ("Sangre (Uroanálisis)", " " if is_blank else f"{ptext(data['uro_sangre'])}"),
+        ("Bilirrubina", " " if is_blank else f"{ptext(data['uro_bilirrubina'])}"),
+        ("Cetona", " " if is_blank else f"{ptext(data['uro_cetona'])}"),
+        ("Proteína (Uroanálisis)", " " if is_blank else f"{ptext(data['uro_proteina'])}"),
+        ("pH", " " if is_blank else f"{ptext(data['uro_ph'])}"),
+        ("Gravedad específica", " " if is_blank else f"{ptext(data['uro_gravedad'])}"),
     ]
     s15_sed = [
-        ("Sedimento: Eritrocitos", f"{ptext(data['sed_eritrocitos'])}"),
-        ("Sedimento: Leucocitos", f"{ptext(data['sed_leucocitos'])}"),
-        ("Bacterias", f"{ptext(data['sed_bacterias'])}"),
-        ("Cilindros renales", f"{ptext(data['sed_cilindros'])} (Tipo: {ptext(data['tipo_cilindros'])})"),
+        ("Sedimento: Eritrocitos", " " if is_blank else f"{ptext(data['sed_eritrocitos'])}"),
+        ("Sedimento: Leucocitos", " " if is_blank else f"{ptext(data['sed_leucocitos'])}"),
+        ("Bacterias", " " if is_blank else f"{ptext(data['sed_bacterias'])}"),
+        (
+            "Cilindros renales",
+            " "
+            if is_blank
+            else f"{ptext(data['sed_cilindros'])} (Tipo: {ptext(data['tipo_cilindros'])})",
+        ),
     ]
     add_section_pdf(
         story,
@@ -2118,6 +2212,7 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         photo_list=data.get("foto_lab"),
         two_column_grid=two_column_grid,
         hide_unassessed=hide_unassessed,
+        is_blank=is_blank,
     )
 
     add_info_box(
@@ -2127,26 +2222,32 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         styles,
     )
 
-    vac_items = []
-    if data["vac_raw_data"]:
-        for vac_info in data["vac_raw_data"]:
-            vac_items.append(
-                ListItem(
-                    Paragraph(html.escape(vac_info), styles["Bullet"]),
-                    leftIndent=15,
-                    spaceAfter=2,
+    if is_blank:
+        s16_items = [
+            ("Vacunas aplicadas (Biológico, Fecha, Lote y Sitio anatómico)", " "),
+            ("Desparasitante Interno", " "),
+        ]
+    else:
+        vac_items = []
+        if data["vac_raw_data"]:
+            for vac_info in data["vac_raw_data"]:
+                vac_items.append(
+                    ListItem(
+                        Paragraph(html.escape(vac_info), styles["Bullet"]),
+                        leftIndent=15,
+                        spaceAfter=2,
+                    )
                 )
-            )
-    flow_vac = (
-        ListFlowable(vac_items, bulletType="bullet", start="bulletchar")
-        if vac_items
-        else Paragraph("—", styles["Small"])
-    )
+        flow_vac = (
+            ListFlowable(vac_items, bulletType="bullet", start="bulletchar")
+            if vac_items
+            else Paragraph("—", styles["Small"])
+        )
+        s16_items = [
+            ("Vacunas aplicadas", flow_vac),
+            ("Desparasitante Interno", f"{ptext(data['desp_interno_seleccionado'])}"),
+        ]
 
-    s16_items = [
-        ("Vacunas aplicadas", flow_vac),
-        ("Desparasitante Interno", f"{ptext(data['desp_interno_seleccionado'])}"),
-    ]
     img_prev = "OWP_Puppy.png" if data["especie"] == "Canino" else "OWP_Gatito.png"
     add_section_pdf(
         story,
@@ -2157,12 +2258,18 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
         notes=data.get("notas_s16"),
         two_column_grid=False,
         hide_unassessed=False,
+        is_blank=is_blank,
     )
 
     story.append(Paragraph("Sección 17 Otras recomendaciones y Comentarios", styles["Section"]))
-    plan = data["recomendaciones"].strip() or "Sin recomendaciones registradas."
+    if is_blank:
+        plan_cell = Spacer(1, 55)
+    else:
+        plan = data["recomendaciones"].strip() or "Sin recomendaciones registradas."
+        plan_cell = Paragraph(ptext(plan).replace("\n", "<br/>"), styles["Plan"])
+
     plan_table = Table(
-        [[Paragraph(ptext(plan).replace("\n", "<br/>"), styles["Plan"])]],
+        [[plan_cell]],
         colWidths=[510],
         hAlign="LEFT",
     )
@@ -2214,19 +2321,23 @@ def build_pdf(data: dict, two_column_grid: bool = True, hide_unassessed: bool = 
     )
     final_block.append(res_table)
 
-    firma_str = data["medico"].strip()
-    if " - Ced. " in firma_str:
-        partes = firma_str.split(" - Ced. ")
-        medico_nombre = partes[0]
-        medico_cedula = partes[1]
+    if is_blank:
+        medico_nombre = " "
+        medico_cedula = " "
     else:
-        medico_nombre = firma_str if firma_str != "Otro" else ""
-        medico_cedula = ""
+        firma_str = data["medico"].strip()
+        if " - Ced. " in firma_str:
+            partes = firma_str.split(" - Ced. ")
+            medico_nombre = partes[0]
+            medico_cedula = partes[1]
+        else:
+            medico_nombre = firma_str if firma_str != "Otro" else ""
+            medico_cedula = ""
 
     final_block.append(Spacer(1, 30))
     firma_texto = (
-        f"<b>MVZ Responsable:</b> {ptext(medico_nombre)}<br/>"
-        f"<b>Cédula Profesional:</b> {ptext(medico_cedula)}"
+        f"<b>MVZ Responsable:</b> {'' if is_blank else ptext(medico_nombre)}<br/>"
+        f"<b>Cédula Profesional:</b> {'' if is_blank else ptext(medico_cedula)}"
     )
     final_block.append(Paragraph(firma_texto, styles["Body"]))
 
@@ -2258,221 +2369,168 @@ def build_blank_pdf(
     two_column_grid: bool = True,
 ) -> bytes:
     """
-    Genera un reporte PDF 100% EN BLANCO (sin contestar) pero dinámicamente adaptado
-    a la Especie (Canino/Felino), Sexo (Macho/Hembra) y Estatus Reproductivo seleccionados,
-    mostrando todos los campos clínicos, escalas y casillas para revisión del equipo médico.
+    Genera un reporte PDF 100% EN BLANCO (celdas vacías sin revelar las opciones de los desplegables),
+    adaptado dinámicamente a la Especie, Sexo y Estatus Reproductivo seleccionados para que el equipo
+    médico revise únicamente qué secciones y parámetros se están evaluando.
     """
-    LINE_BLANK = "________________________"
-    NOTE_BLANK = "____________________________________________________________________________________"
-
     blank_data = {
         "_is_blank_template": True,
-        "mascota": "________________________",
-        "familia": "________________________",
-        "edad": "___________",
-        "fecha": "____ / ____ / 202___",
-        "medico": "________________________________ - Ced. ________________",
+        "mascota": " ",
+        "familia": " ",
+        "edad": " ",
+        "fecha": " ",
+        "medico": " ",
         "especie": especie,
         "sexo": sexo,
         "estado_reproductivo": estado_reproductivo,
-        # Constantes
-        "peso_kg": "________",
-        "fc": "________",
-        "fr": "________",
-        "temp": "________",
-        "tllc": "________",
-        "mucosas": "[  ] Rosas y húmedas  [  ] Pálidas  [  ] Congestivas  [  ] Ictéricas",
-        "spo2": "________ %",
-        "pam": "________ mmHg",
-        "notas_constantes": NOTE_BLANK,
-        # Sección 1
-        "cond_gral": "[  ] Excelente   [  ] Buena   [  ] Necesita mejorar",
-        "peso": "[  ] Perfecto   [  ] Demasiado delgado   [  ] Muy pesado",
-        "bcs_escala": "[  ] 1-3: Delgado/Bajo peso  [  ] 4-5: Peso ideal  [  ] 6-7: Sobrepeso  [  ] 8-9: Obesidad  ( ___ / 9 )",
-        "plan_nutricional": "[  ] Mantener dieta y porción actual (peso ideal)   [  ] Ajustar porción / dieta: ______________",
-        "alim_seco": LINE_BLANK,
-        "alim_humedo": LINE_BLANK,
-        "nutra": LINE_BLANK,
-        "notas_s1": NOTE_BLANK,
-        # Sección 2
-        "pelo_piel": "[  ] Parece normal   [  ] Anormal",
-        "planos_por_lesion": [
-            "[  ] Máculas  [  ] Escamas  [  ] Excoriaciones  [  ] Eritema  [  ] Hiperpigmentación  [  ] Alopecia  [  ] Úlceras",
-            "Planos anatómicos afectados: ________________________________________________________",
-        ],
-        "rec_piel": LINE_BLANK,
-        "shampoo_rec": LINE_BLANK,
-        "ectoparasitos": "[  ] Ninguno presente   [  ] Pulgas   [  ] Piojos   [  ] Garrapatas",
-        "c_pulgas": "[  ] Sin pulgas: continuar prevención   [  ] Tiene pulgas: controlar",
-        "trat_pulgas": "Mascota: ____________ | Casa: ____________ | Coche: ____________ | Patio: c/___ sem | Prod: ____________",
-        "notas_s2": NOTE_BLANK,
-        # Sección 3
-        "hig": "[  ] Normal  [  ] Anormal  [  ] No palpable",
-        "est": "[  ] Normal  [  ] Anormal  [  ] No palpable",
-        "bazo": "[  ] Normal  [  ] Anormal  [  ] No palpable",
-        "rd": "[  ] Normal  [  ] Anormal  [  ] No palpable",
-        "ri": "[  ] Normal  [  ] Anormal  [  ] No palpable",
-        "int_mes": "[  ] Normal  [  ] Anormal  [  ] No palpable",
-        "imp_gral": "[  ] Dentro de límites normales   [  ] Anormal",
-        "notas_s3": NOTE_BLANK,
-        # Sección 4 Urogenital (General + Condicionales según Sexo/Estatus/Especie)
-        "secr_uro": "[  ] Negativo   [  ] Positivo",
-        "infl_uro": "[  ] Negativo   [  ] Positivo",
-        "bult_uro": "[  ] Negativo   [  ] Positivo",
-        "tum_mam": "[  ] Negativo   [  ] Positivo",
-        "uro_pene_prepucio": "[  ] Normal   [  ] Secreción   [  ] Balanopostitis",
-        "uro_testiculos": "[  ] Normales descendidos   [  ] Retenido   [  ] Asimétrico",
-        "uro_prostata_macho": "[  ] Normal   [  ] Aumentada o dolor   [  ] No palpable",
-        "uro_vulva": "[  ] Normal   [  ] Secreción   [  ] Dermatitis",
-        "uro_cadena_mamaria": "[  ] Normal (sin nódulos)   [  ] Nódulos Der   [  ] Nódulos Izq   [  ] Bilateral",
-        "uro_detalle_mamas": "Glándulas (M1-M5): __________________",
-        "uro_ultimo_celo": "___________________________",
-        "notas_s4": NOTE_BLANK,
-        # Sección 5
-        "pros": "[  ] Normal   [  ] Anormal",
-        "tum_rect": "[  ] Negativo   [  ] Positivo",
-        "hern": "[  ] Negativo   [  ] Positivo",
-        "sacos": "[  ] Vacío   [  ] Normal   [  ] Anormal",
-        "notas_s5": NOTE_BLANK,
-        # Sección 6
-        "epo": "[  ] Negativo   [  ] Grado I   [  ] Grado II   [  ] Grado III   [  ] Grado IV",
-        "sarro": "[  ] Negativo   [  ] Positivo",
-        "mord": "[  ] Normal   [  ] Anormal",
-        "decol_d": "[  ] Negativo   [  ] Positivo",
-        "hinc_e": "[  ] Negativo   [  ] Positivo",
-        "retr_e": "[  ] Negativo   [  ] Positivo",
-        "inf_e": "[  ] Negativo   [  ] Positivo",
-        "epul_e": "[  ] Negativo   [  ] Positivo",
-        "inf_a": "[  ] Negativo   [  ] Positivo",
-        "hinc_a": "[  ] Negativo   [  ] Positivo",
-        "inf_l": "[  ] Negativo   [  ] Positivo",
-        "dec_l": "[  ] Negativo   [  ] Positivo",
-        "hinc_l": "[  ] Negativo   [  ] Positivo",
-        "tal_n": "[  ] Normal   [  ] Anormal",
-        "con_n": "[  ] Normal   [  ] Anormal",
-        "inf_g": "[  ] Negativo   [  ] Positivo",
-        "ref_g": "[  ] Normal   [  ] Anormal",
-        "rec_dental": LINE_BLANK,
-        "notas_s6": NOTE_BLANK,
-        # Sección 7
-        "conj_od": "[  ] Negativo   [  ] Positivo",
-        "sec_od": "[  ] Negativo   [  ] Positivo",
-        "def_od": "[  ] Negativo   [  ] Positivo",
-        "tum_od": "[  ] Negativo   [  ] Positivo",
-        "pio_od": "________",
-        "conj_oi": "[  ] Negativo   [  ] Positivo",
-        "sec_oi": "[  ] Negativo   [  ] Positivo",
-        "def_oi": "[  ] Negativo   [  ] Positivo",
-        "tum_oi": "[  ] Negativo   [  ] Positivo",
-        "pio_oi": "________",
-        "rec_oftalmica": LINE_BLANK,
-        "notas_s7": NOTE_BLANK,
-        # Sección 8
-        "ore_od": "[  ] Normal   [  ] Anormal",
-        "tim_od": "[  ] Normal   [  ] Anormal",
-        "aca_od": "[  ] Normal   [  ] Anormal",
-        "tum_oido_od": "[  ] Normal   [  ] Anormal",
-        "inf_oido_od": "[  ] Normal   [  ] Anormal",
-        "sec_oido_od": "[  ] Negativo   [  ] Positivo",
-        "ore_oi": "[  ] Normal   [  ] Anormal",
-        "tim_oi": "[  ] Normal   [  ] Anormal",
-        "aca_oi": "[  ] Normal   [  ] Anormal",
-        "tum_oido_oi": "[  ] Normal   [  ] Anormal",
-        "inf_oido_oi": "[  ] Normal   [  ] Anormal",
-        "sec_oido_oi": "[  ] Negativo   [  ] Positivo",
-        "rec_otica": LINE_BLANK,
-        "notas_s8": NOTE_BLANK,
-        # Sección 9
-        "cue": "[  ] Normal   [  ] Anormal",
-        "esp": "[  ] Normal   [  ] Anormal",
-        "cola": "[  ] Normal   [  ] Anormal",
-        "mad": "[  ] Normal   [  ] Anormal",
-        "mai": "[  ] Normal   [  ] Anormal",
-        "mpd": "[  ] Normal   [  ] Anormal",
-        "mpi": "[  ] Normal   [  ] Anormal",
-        "tipo_marcha": "[  ] Normal / coordinada   [  ] Claudicación / Renguea   [  ] Dificultad para levantarse / Rigidez",
-        "miembro_claudicacion": ["[  ] AD   [  ] AI   [  ] PD   [  ] PI   (En caso de claudicación/rigidez)"],
-        "grado_claudicacion": "[  ] Grado 1   [  ] Grado 2   [  ] Grado 3   [  ] Grado 4   [  ] Grado 5",
-        "notas_s9": NOTE_BLANK,
-        # Sección 10
-        "ment": "[  ] Normal   [  ] Anormal",
-        "cran": "[  ] Normal   [  ] Anormal",
-        "prop": "[  ] Normal   [  ] Anormal",
-        "patel": "[  ] Normal   [  ] Anormal",
-        "dolor": "[  ] Negativo   [  ] Positivo",
-        "reg_dolor": LINE_BLANK,
-        "notas_s10": NOTE_BLANK,
-        # Sección 11
-        "f_car": "[  ] Normal   [  ] Anormal",
-        "pul_car": "[  ] Normal   [  ] Anormal",
-        "sop_car": "[  ] Negativo   [  ] Positivo",
-        "rit_car": "[  ] Normal   [  ] Anormal",
-        "tllc_car": "[  ] Normal   [  ] Anormal",
-        "notas_s11": NOTE_BLANK,
-        # Sección 12
-        "cd": "[  ] Normal   [  ] Anormal",
-        "cad": "[  ] Normal   [  ] Anormal",
-        "ci": "[  ] Normal   [  ] Anormal",
-        "cai": "[  ] Normal   [  ] Anormal",
-        "notas_s12": NOTE_BLANK,
-        # Sección 13
-        "leu": "[  ] Negativo   [  ] Positivo   [  ] No realizado",
-        "sida": "[  ] Negativo   [  ] Positivo   [  ] No realizado",
-        "hemo": "[  ] Negativo   [  ] Positivo   [  ] No realizado",
-        "notas_s13": NOTE_BLANK,
-        # Sección 14
-        "tox": "[  ] Neg   [  ] Pos",
-        "coc": "[  ] Neg   [  ] Pos",
-        "nem": "[  ] Neg   [  ] Pos",
-        "gia": "[  ] Neg   [  ] Pos",
-        "gyp": "[  ] Neg   [  ] Pos",
-        "ces": "[  ] Neg   [  ] Pos",
-        "notas_s14": NOTE_BLANK,
-        # Sección 15
-        "eritrocitos": "[  ] Normal   [  ] Anormal",
-        "leucocitos_s": "[  ] Normal   [  ] Anormal",
-        "tiroides": "[  ] Normal   [  ] Anormal   [  ] Pendiente",
-        "enz_ren": "[  ] Normal   [  ] Anormal",
-        "enz_hep": "[  ] Normal   [  ] Anormal",
-        "enz_pan": "[  ] Normal   [  ] Anormal",
-        "electrolitos": "[  ] Normal   [  ] Anormal",
-        "prot_ser": "[  ] Normal   [  ] Anormal",
-        "uro_urobilinogeno": "[  ] Normal   [  ] Anormal",
-        "uro_sangre": "[  ] Normal   [  ] Anormal",
-        "uro_bilirrubina": "[  ] Normal   [  ] Anormal",
-        "uro_cetona": "[  ] Normal   [  ] Anormal",
-        "uro_proteina": "[  ] Normal   [  ] Anormal",
-        "uro_ph": "________",
-        "uro_gravedad": "________",
-        "sed_eritrocitos": "[  ] No presente   [  ] Presente",
-        "sed_leucocitos": "[  ] No presente   [  ] Presente",
-        "sed_bacterias": "[  ] No presente   [  ] Presente",
-        "sed_cilindros": "[  ] No presente   [  ] Presente",
-        "tipo_cilindros": "________________",
-        "notas_uro": NOTE_BLANK,
-        # Sección 16
-        "vac_raw_data": [
-            "1) Biológico: ___________________ | Lote: ___________ | Fecha: ___/___/___ | Sitio: [ ] MPD [ ] MPI [ ] MAD [ ] MAI [ ] Interescapular",
-            "2) Biológico: ___________________ | Lote: ___________ | Fecha: ___/___/___ | Sitio: [ ] MPD [ ] MPI [ ] MAD [ ] MAI [ ] Interescapular",
-            "3) Biológico: ___________________ | Lote: ___________ | Fecha: ___/___/___ | Sitio: [ ] MPD [ ] MPI [ ] MAD [ ] MAI [ ] Interescapular",
-        ],
-        "desp_interno_seleccionado": LINE_BLANK,
-        "notas_s16": NOTE_BLANK,
-        # Sección 17
-        "recomendaciones": (
-            "[  ] Salud Dental: Sugerimos programar una limpieza dental profunda bajo anestesia y radiografías dentales para evaluar raíces por debajo de la encía y prevenir infecciones.\n"
-            "[  ] Articulaciones / Marcha: Recomendamos tomar radiografías de evaluación en extremidades y espalda debido a la molestia o rigidez al caminar, valorando protectores articulares.\n"
-            "[  ] Oídos / Piel: Sugerimos citología ótica o cutánea para identificar el microorganismo causante de la comezón o secreción y dar el tratamiento exacto.\n"
-            "[  ] Peso y Nutrición: Ajustar la porción de alimento y fomentar ejercicio diario para cuidar articulaciones y función cardiaca.\n"
-            "[  ] Cirugía Preventiva: Recomendamos programar cirugía de esterilización/castración preventiva para evitar infecciones uterinas o afecciones prostáticas.\n"
-            "[  ] Monitoreo de Medicamentos: Sugerimos análisis de sangre y orina periódicos para asegurar que hígado y riñón procesen adecuadamente los tratamientos continuos.\n\n"
-            "Otras indicaciones médicas:\n"
-            f"{NOTE_BLANK}\n{NOTE_BLANK}"
-        ),
+        "peso_kg": " ",
+        "fc": " ",
+        "fr": " ",
+        "temp": " ",
+        "tllc": " ",
+        "mucosas": " ",
+        "cond_gral": " ",
+        "peso": " ",
+        "plan_nutricional": " ",
+        "alim_seco": " ",
+        "alim_humedo": " ",
+        "nutra": " ",
+        "pelo_piel": " ",
+        "planos_por_lesion": [],
+        "rec_piel": " ",
+        "shampoo_rec": " ",
+        "ectoparasitos": " ",
+        "c_pulgas": " ",
+        "trat_pulgas": " ",
+        "notas_s2": " ",
+        "hig": " ",
+        "est": " ",
+        "bazo": " ",
+        "rd": " ",
+        "ri": " ",
+        "int_mes": " ",
+        "imp_gral": " ",
+        "notas_s3": " ",
+        "secr_uro": " ",
+        "infl_uro": " ",
+        "bult_uro": " ",
+        "tum_mam": " ",
+        "uro_pene_prepucio": " ",
+        "uro_testiculos": " ",
+        "uro_prostata_macho": " ",
+        "uro_vulva": " ",
+        "uro_cadena_mamaria": " ",
+        "uro_detalle_mamas": " ",
+        "uro_ultimo_celo": " ",
+        "pros": " ",
+        "tum_rect": " ",
+        "hern": " ",
+        "sacos": " ",
+        "epo": " ",
+        "sarro": " ",
+        "mord": " ",
+        "decol_d": " ",
+        "hinc_e": " ",
+        "retr_e": " ",
+        "inf_e": " ",
+        "epul_e": " ",
+        "inf_a": " ",
+        "hinc_a": " ",
+        "inf_l": " ",
+        "dec_l": " ",
+        "hinc_l": " ",
+        "tal_n": " ",
+        "con_n": " ",
+        "inf_g": " ",
+        "ref_g": " ",
+        "rec_dental": " ",
+        "notas_s6": " ",
+        "conj_od": " ",
+        "sec_od": " ",
+        "def_od": " ",
+        "tum_od": " ",
+        "pio_od": " ",
+        "conj_oi": " ",
+        "sec_oi": " ",
+        "def_oi": " ",
+        "tum_oi": " ",
+        "pio_oi": " ",
+        "rec_oftalmica": " ",
+        "ore_od": " ",
+        "tim_od": " ",
+        "aca_od": " ",
+        "tum_oido_od": " ",
+        "inf_oido_od": " ",
+        "sec_oido_od": " ",
+        "ore_oi": " ",
+        "tim_oi": " ",
+        "aca_oi": " ",
+        "tum_oido_oi": " ",
+        "inf_oido_oi": " ",
+        "sec_oido_oi": " ",
+        "rec_otica": " ",
+        "cue": " ",
+        "esp": " ",
+        "cola": " ",
+        "mad": " ",
+        "mai": " ",
+        "mpd": " ",
+        "mpi": " ",
+        "tipo_marcha": " ",
+        "miembro_claudicacion": [],
+        "grado_claudicacion": " ",
+        "ment": " ",
+        "cran": " ",
+        "prop": " ",
+        "patel": " ",
+        "dolor": " ",
+        "reg_dolor": " ",
+        "f_car": " ",
+        "pul_car": " ",
+        "sop_car": " ",
+        "rit_car": " ",
+        "tllc_car": " ",
+        "cd": " ",
+        "cad": " ",
+        "ci": " ",
+        "cai": " ",
+        "notas_s12": " ",
+        "leu": " ",
+        "sida": " ",
+        "hemo": " ",
+        "tox": " ",
+        "coc": " ",
+        "nem": " ",
+        "gia": " ",
+        "gyp": " ",
+        "ces": " ",
+        "eritrocitos": " ",
+        "leucocitos_s": " ",
+        "tiroides": " ",
+        "enz_ren": " ",
+        "enz_hep": " ",
+        "enz_pan": " ",
+        "electrolitos": " ",
+        "prot_ser": " ",
+        "uro_urobilinogeno": " ",
+        "uro_sangre": " ",
+        "uro_bilirrubina": " ",
+        "uro_cetona": " ",
+        "uro_proteina": " ",
+        "uro_ph": " ",
+        "uro_gravedad": " ",
+        "sed_eritrocitos": " ",
+        "sed_leucocitos": " ",
+        "sed_bacterias": " ",
+        "sed_cilindros": " ",
+        "tipo_cilindros": " ",
+        "notas_uro": " ",
+        "vac_raw_data": [],
+        "desp_interno_seleccionado": " ",
+        "recomendaciones": " ",
     }
 
-    pdf_bytes = build_pdf(blank_data, two_column_grid=two_column_grid, hide_unassessed=False)
-    return pdf_bytes
+    return build_pdf(blank_data, two_column_grid=two_column_grid, hide_unassessed=False)
 
 
 def build_via_text(d: dict) -> str:
@@ -2510,13 +2568,10 @@ def build_via_text(d: dict) -> str:
         f"TEMP: {d['temp']} C",
         f"TLLC: {d['tllc']} S",
         f"MUCOSAS: {d['mucosas']}",
-        f"SPO2: {d['spo2']}",
-        f"PAM: {d['pam']}",
         f"NOTAS CONSTANTES: {d.get('notas_constantes', '')}",
         "--- SECCION 1 CONDICION GENERAL ---",
         f"CONDICION GENERAL: {d['cond_gral']}",
-        f"CONDICION PESO: {d['peso']}",
-        f"CONDICION CORPORAL (BCS 1-9): {d.get('bcs_escala', '')}",
+        f"CONDICION CORPORAL / PESO (BCS 1-9): {d['peso']}",
         f"INDICACION NUTRICIONAL: {d.get('plan_nutricional', '')}",
         f"ALIMENTO SECO: {clean_text(d['alim_seco'])}",
         f"ALIMENTO HUMEDO: {clean_text(d['alim_humedo'])}",
@@ -2620,11 +2675,11 @@ def build_via_text(d: dict) -> str:
         f"DOLOR DIGITOPRESION: {d['dolor']} ({d['reg_dolor']})",
         f"NOTAS SECCION 10: {d.get('notas_s10', '')}",
         "--- SECCION 11 CARDIOVASCULAR ---",
-        f"FRECUENCIA CV: {d['f_car']}",
-        f"PULSO CV: {d['pul_car']}",
-        f"SOPLO CV: {d['sop_car']}",
-        f"RITMO CV: {d['rit_car']}",
-        f"TLLC CV: {d['tllc_car']}",
+        f"FRECUENCIA CARDIACA: {d['f_car']}",
+        f"PULSO: {d['pul_car']}",
+        f"SOPLO: {d['sop_car']}",
+        f"RITMO: {d['rit_car']}",
+        f"TIEMPO DE LLENADO CAPILAR: {d['tllc_car']}",
         f"NOTAS SECCION 11: {d.get('notas_s11', '')}",
         "--- SECCION 12 CAMPOS PULMONARES ---",
         f"PULMON CRANEAL DER: {d['cd']}",
@@ -2715,7 +2770,7 @@ with st.sidebar:
     if st.button(
         "🖨️ Generar Formato EN BLANCO (Según Especie y Sexo)",
         use_container_width=True,
-        help="Genera el PDF vacío sin contestar pero adaptado dinámicamente a la Especie, Sexo y Estatus reproductivo seleccionados (ideal para revisión del equipo médico o llenado manual).",
+        help="Genera el PDF 100% vacío (sin mostrar opciones de los menús desplegables), adaptado dinámicamente a la Especie, Sexo y Estatus reproductivo seleccionados.",
     ):
         try:
             est_slug = "Entero" if "Entero" in estado_reproductivo else "Castrado"
@@ -2855,57 +2910,35 @@ vacunas_filtradas = get_vaccine_options(df_cat, especie)
 
 with tabs[0]:
     ui_header("Constantes Fisiológicas", "Estetoscopio_c.png")
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
     data["peso_kg"] = c1.text_input("Peso (kg)", key="peso_kg")
     data["fc"] = c2.text_input("Frecuencia cardiaca (lpm)", key="fc")
     data["fr"] = c3.text_input("Frecuencia respiratoria (rpm)", key="fr")
-    data["temp"] = c4.text_input("Temperatura (°C)", key="temp")
 
-    c1, c2, c3, c4 = st.columns(4)
-    data["tllc"] = c1.text_input("TLLC (segundos)", key="tllc")
-    with c2:
+    c1, c2, c3 = st.columns(3)
+    data["temp"] = c1.text_input("Temperatura (°C)", key="temp")
+    data["tllc"] = c2.text_input("TLLC (segundos)", key="tllc")
+    with c3:
         data["mucosas"] = select_con_otro(
             "Mucosas",
             ["Rosas y húmedas", "Pálidas", "Congestivas", "Ictéricas", "Otro", "Ninguno"],
             "mucosas",
         )
-    data["spo2"] = c3.text_input("% SpO2", key="spo2")
-    data["pam"] = c4.text_input("PAM", key="pam")
     data["notas_constantes"] = st.text_area("Notas de constantes fisiológicas", height=68, key="notas_constantes")
     data["foto_constantes"] = renderizar_uploader("Constantes", "foto_constantes")
 
     ui_header("Sección 1 Condición general", "Examen.png")
-    c1, c2, c3 = st.columns(3)
+    c1, c2 = st.columns(2)
     data["cond_gral"] = c1.selectbox(
         "Condición general",
         ["Excelente", "Buena", "Necesita mejorar", "No evaluado", "Ninguno"],
         key="cond_gral",
     )
     data["peso"] = c2.selectbox(
-        "Condición de peso",
-        ["Perfecto", "Demasiado delgado", "Muy pesado", "No evaluado", "Ninguno"],
+        "Condición corporal / peso (Escala BCS 1 al 9)",
+        BCS_OPTIONS,
+        index=4,  # Preseleccionado en "5/9 - Peso ideal"
         key="peso",
-    )
-    data["bcs_escala"] = c3.selectbox(
-        "Condición Corporal (Escala BCS 1 al 9)",
-        [
-            "4-5: Peso ideal",
-            "1-3: Delgado / Bajo peso",
-            "6-7: Sobrepeso",
-            "8-9: Obesidad",
-            "1/9: Delgado severo",
-            "2/9: Delgado",
-            "3/9: Bajo peso ligero",
-            "4/9: Peso ideal",
-            "5/9: Peso ideal",
-            "6/9: Sobrepeso ligero",
-            "7/9: Sobrepeso marcado",
-            "8/9: Obesidad",
-            "9/9: Obesidad mórbida",
-            "No evaluado",
-            "Ninguno",
-        ],
-        key="bcs_escala",
     )
 
     data["plan_nutricional"] = st.selectbox(
@@ -3221,11 +3254,11 @@ with tabs[3]:
 
     ui_header("Sección 11 Cardiovascular / corazón", "Corazon.png")
     c1, c2 = st.columns(2)
-    data["f_car"] = c1.selectbox("Frecuencia CV", opn, key="f_car")
+    data["f_car"] = c1.selectbox("Frecuencia cardiaca", opn, key="f_car")
     data["pul_car"] = c2.selectbox("Pulso", opn, key="pul_car")
     data["sop_car"] = c1.selectbox("Soplo/sonido anormal", ["Negativo", "Positivo", "No evaluado", "Ninguno"], key="sop_car")
     data["rit_car"] = c2.selectbox("Ritmo", opn, key="rit_car")
-    data["tllc_car"] = c1.selectbox("TLLC CV", opn, key="tllc_car")
+    data["tllc_car"] = c1.selectbox("Tiempo de Llenado Capilar", opn, key="tllc_car")
     data["notas_s11"] = st.text_area("Notas de la sección 11 (Cardiovascular)", height=68, key="notas_s11")
 
     ui_header("Sección 12 Campos pulmonares")
