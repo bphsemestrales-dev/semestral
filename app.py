@@ -166,7 +166,6 @@ def multiselect_con_otro(label: str, opciones: list[str], key_base: str) -> list
     return val
 
 
-
 # ================= UTILIDADES DE SESIÓN Y FRAGMENTO QR =================
 st.session_state.setdefault("patient_session_id", 0)
 
@@ -187,7 +186,17 @@ def reset_consulta_actual() -> None:
     for k, v in preserved.items():
         st.session_state[k] = v
 
-
+    # Restablecer explícitamente los widgets de la barra lateral con llave fija
+    st.session_state["especie"] = "Canino"
+    st.session_state["sexo"] = "Macho"
+    st.session_state["estado_reproductivo"] = "Castrado / Esterilizada"
+    st.session_state["mascota"] = ""
+    st.session_state["familia"] = ""
+    st.session_state["anios"] = "0"
+    st.session_state["meses"] = "0"
+    st.session_state["fecha"] = datetime.date.today()
+    st.session_state["medico_sel"] = medicos[0] if medicos else "Otro"
+    st.session_state["medico_txt"] = ""
 
 
 # ================= BARRA LATERAL (IDENTIDAD, ALERTAS Y PORTAL MÓVIL) =================
@@ -216,16 +225,15 @@ with st.sidebar:
         aplicar_paciente_sano_defaults()
         st.toast("Parámetros clínicos establecidos en Normal/Negativo.", icon="✅")
 
-    if st.button(
+    st.button(
         "🧹 Nuevo Paciente / Limpiar Consulta",
         use_container_width=True,
+        on_click=reset_consulta_actual,
         help="Reinicia todos los campos del formulario, limpia fotos de PC y libera la sesión móvil QR de la memoria.",
-    ):
-        reset_consulta_actual()
-        st.rerun()
+    )
 
     st.header("Datos generales")
-    especie = st.radio("Especie", ["Canino", "Felino"], horizontal=True)
+    especie = st.radio("Especie", ["Canino", "Felino"], horizontal=True, key="especie")
     c_sex, c_rep = st.columns(2)
     sexo = c_sex.selectbox("Sexo", ["Macho", "Hembra"], key="sexo")
     estado_reproductivo = c_rep.selectbox(
